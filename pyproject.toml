@@ -14,7 +14,7 @@ dependencies = [
     "google-genai>=1.0.0",
     "pypdf>=3.0.0",
     "psycopg2-binary>=2.9.0",
-    "claude-code-sdk>=0.1.0",
+    "claude-agent-sdk==0.2.153",
 ]
 
 [build-system]
@@ -26,7 +26,7 @@ build-backend = "flit_core.buildapi"
 # package_name = "~=1.1.0"
 
 [tool.bench.frappe-dependencies]
-frappe = ">=15.0.0,<=17.0.0-dev"
+frappe = ">=16.0.0,<17.0.0"
 
 [tool.bench.assets]
 build_dir = "./frontend"

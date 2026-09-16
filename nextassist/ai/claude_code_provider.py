@@ -4,9 +4,7 @@ import queue
 import threading
 from collections.abc import Generator
 
-from claude_code_sdk import ClaudeCodeOptions, query
-from claude_code_sdk._errors import MessageParseError
-from claude_code_sdk._internal.transport.subprocess_cli import SubprocessCLITransport
+from claude_agent_sdk import ClaudeAgentOptions, MessageParseError, query
 
 from nextassist.ai.base_provider import BaseProvider
 from nextassist.ai.claude_code_utils import find_claude_cli
@@ -21,15 +19,16 @@ class ClaudeCodeProvider(BaseProvider):
 		self._context_window = getattr(provider_doc, "context_window", None)
 		self._cli_path = find_claude_cli()
 
-	def _build_options(self, model: str, system_prompt: str | None = None) -> ClaudeCodeOptions:
-		"""Build ClaudeCodeOptions for the SDK query."""
+	def _build_options(self, model: str, system_prompt: str | None = None) -> ClaudeAgentOptions:
+		"""Build options using the public Claude Agent SDK API."""
 		env = {}
 		if self._api_key:
 			env["ANTHROPIC_API_KEY"] = self._api_key
 
-		opts = ClaudeCodeOptions(
+		opts = ClaudeAgentOptions(
 			model=model,
 			max_turns=10,
+			cli_path=self._cli_path,
 		)
 
 		if env:
@@ -39,10 +38,6 @@ class ClaudeCodeProvider(BaseProvider):
 			opts.system_prompt = system_prompt
 
 		return opts
-
-	def _make_transport(self, prompt: str, options: ClaudeCodeOptions) -> SubprocessCLITransport:
-		"""Create a transport with an explicit CLI path to avoid PATH issues."""
-		return SubprocessCLITransport(prompt=prompt, options=options, cli_path=self._cli_path)
 
 	def _extract_from_messages(self, messages: list[dict]) -> tuple[str, str]:
 		"""Extract system prompt and build a combined user prompt from messages.
@@ -73,14 +68,13 @@ class ClaudeCodeProvider(BaseProvider):
 
 		return system_prompt, user_prompt
 
-	def _run_async_query(self, result_queue: queue.Queue, prompt: str, options: ClaudeCodeOptions):
+	def _run_async_query(self, result_queue: queue.Queue, prompt: str, options: ClaudeAgentOptions):
 		"""Run the async SDK query in a separate thread, pushing events to the queue."""
 
 		async def _stream():
 			got_content = False
 			try:
-				transport = self._make_transport(prompt, options)
-				async for message in query(prompt=prompt, options=options, transport=transport):
+				async for message in query(prompt=prompt, options=options):
 					msg_type = type(message).__name__
 
 					if msg_type == "AssistantMessage":
@@ -211,8 +205,7 @@ class ClaudeCodeProvider(BaseProvider):
 			options.max_turns = 1
 
 			async def _test():
-				transport = self._make_transport("hi", options)
-				async for _msg in query(prompt="hi", options=options, transport=transport):
+				async for _msg in query(prompt="hi", options=options):
 					pass
 
 			loop = asyncio.new_event_loop()
