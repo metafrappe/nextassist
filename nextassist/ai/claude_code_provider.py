@@ -4,7 +4,7 @@ import queue
 import threading
 from collections.abc import Generator
 
-from claude_agent_sdk import ClaudeAgentOptions, MessageParseError, query
+from claude_agent_sdk import ClaudeAgentOptions, query
 
 from nextassist.ai.base_provider import BaseProvider
 from nextassist.ai.claude_code_utils import find_claude_cli
@@ -72,7 +72,6 @@ class ClaudeCodeProvider(BaseProvider):
 		"""Run the async SDK query in a separate thread, pushing events to the queue."""
 
 		async def _stream():
-			got_content = False
 			try:
 				async for message in query(prompt=prompt, options=options):
 					msg_type = type(message).__name__
@@ -85,7 +84,6 @@ class ClaudeCodeProvider(BaseProvider):
 								if block_type == "TextBlock":
 									text = getattr(block, "text", "")
 									if text:
-										got_content = True
 										result_queue.put({"type": "token", "content": text})
 								elif block_type == "ToolUseBlock":
 									result_queue.put({
@@ -95,7 +93,6 @@ class ClaudeCodeProvider(BaseProvider):
 										"arguments": json.dumps(getattr(block, "input", {})),
 									})
 						elif isinstance(content, str) and content:
-							got_content = True
 							result_queue.put({"type": "token", "content": content})
 
 					elif msg_type == "ResultMessage":
@@ -118,13 +115,6 @@ class ClaudeCodeProvider(BaseProvider):
 							}
 							result_queue.put({"type": "done", "usage": usage})
 
-			except MessageParseError:
-				# SDK can't parse some message types (e.g. rate_limit_event).
-				# If we already received content, treat as successful completion.
-				if got_content:
-					result_queue.put({"type": "done", "usage": {}})
-				else:
-					result_queue.put({"type": "error", "message": "Failed to parse Claude Code response."})
 			except Exception as e:
 				result_queue.put({"type": "error", "message": str(e)})
 			finally:
@@ -214,9 +204,6 @@ class ClaudeCodeProvider(BaseProvider):
 			finally:
 				loop.close()
 
-			return True
-		except MessageParseError:
-			# SDK may not handle all message types — the query itself succeeded
 			return True
 		except Exception:
 			return False

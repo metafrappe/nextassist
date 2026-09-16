@@ -22,7 +22,7 @@ def run(app):
 
 
 def check_nextassist():
-    from claude_agent_sdk import AssistantMessage, TextBlock
+    from claude_agent_sdk import AssistantMessage, ClaudeSDKError, TextBlock
     from nextassist.ai import claude_code_provider as module
     from nextassist.database.pool import test_connection
     from nextassist.database.settings_db import get_settings, save_settings
@@ -40,3 +40,14 @@ def check_nextassist():
     with patch.object(module, 'query', mock_query):
         response = provider.chat_completion([{'role': 'user', 'content': 'Hello'}], model='test-model')
     assert response['content'] == 'Merhaba'
+    async def failing_query(**kwargs):
+        yield AssistantMessage(content=[TextBlock(text='Partial')], model='test-model')
+        raise ClaudeSDKError('Incomplete SDK response')
+    with patch.object(module, 'query', failing_query):
+        assert provider.validate_api_key('test-model') is False
+        try:
+            provider.chat_completion([{'role': 'user', 'content': 'Hello'}], model='test-model')
+        except Exception as error:
+            assert 'Incomplete SDK response' in str(error)
+        else:
+            raise AssertionError('SDK errors must not be reported as successful answers')
